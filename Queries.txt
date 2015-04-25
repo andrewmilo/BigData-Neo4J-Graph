@@ -1,0 +1,62 @@
+We create indexes on the user id, organization name
+	CREATE INDEX ON :User(id)
+	CREATE INDEX ON :Organization(organization_name)
+
+When loading each file, we want to commit every 10000 for memory efficiency
+and we skip the header file
+	USING PERIODIC COMMIT 10000
+	LOAD CSV FROM DIRECTORY AS line WITH line SKIP 1
+
+Create User: We use create when the database is empty to create users since it's faster.
+Otherwise we use merge
+	CREATE (:User {id: line[0], first_name: line[1], last_name: line[2]})
+	MERGE  (:User {id: line[0], first_name: line[1], last_name: line[2]})
+
+Creating Interests and giving them to the appropriate user:
+	MATCH (user:User {id : line[0]}) 
+    MERGE (interest:Interest {interest_name: line[1]}) 
+    MERGE (user) -[:HAS_INTEREST {interest_level: line[2]}]-> (interest)
+
+Creating Skills and giving them to the appropriate user:
+	MATCH (user:User {id: line[0]}) 
+    MERGE (skill:Skill {skill_name: line[1]})  
+    MERGE (user) -[:HAS_SKILL {skill_level: line[2]}]-> (skill)
+
+Creating Projects and giving them to the appropriate user:
+	MATCH (user:User {id: line[0]}) 
+	MERGE (project:Project {project_title: line[1]})  
+    MERGE (user) -[:WORKS_ON]-> (project)
+
+Creating Organizations and matching them to the appropriate user
+	MATCH (user:User {id :line[0]}) 
+    MERGE (org:Organization {organization_name: line[1], organization_type: line[2]})  
+    MERGE (user) -[:WORKS_FOR]-> (org)
+
+Giving Organizations a distance relationship	
+	Match (org1:Organization {organization_name: line[0]}),(org2:Organization {organization_name: line[1]}) 
+    MERGE (org1) -[:DISTANCE {distance: line[2]}]-> (org2) 
+
+Giving Users a trusted colleague relationship
+	MATCH (user1:User) -[:WORKS_ON]-> (:Project) <- [:WORKS_ON] - (user2:User) 
+    MERGE (user1) -[:TRUSTED_COLLEAGUE]-(user2)
+
+queryCollaborator:
+	MATCH (user:User {id:"userID"}) -[:WORKS_FOR]-> (org1:Organization {organization_type : "organizationType"}),
+    (user2:User) -[:WORKS_FOR]->(org2:Organization)
+    OPTIONAL MATCH (org1)-[d:DISTANCE]-(org2)
+    WITH user, user2, org1, org2, d
+    WHERE org1.organization_name = org2.organization_name OR toInt(d.distance) <= distance 
+    WITH user, user2, org2
+    OPTIONAL Match (user) -[IW1:HAS_INTEREST] ->(i:Interest)<- [IW2:HAS_INTEREST]- (user2)
+    OPTIONAL MATCH (user) -[SW1:HAS_SKILL] ->(s:Skill)<- [SW2:HAS_SKILL]- (user2)
+    WITH user2, org2, i, s, IW1, IW2, SW1, SW2, CASE WHEN (toInt(SW1.skill_level) < toInt(SW2.skill_level)) THEN SW2 ELSE SW1 END as SW
+    WHERE i IS NOT null OR s IS NOT null
+    RETURN DISTINCT user2.first_name as First_Name, user2.last_name as Last_Name, org2.organization_name as Organization, collect(DISTINCT i.interest_name) as Shared_Interests, 
+    collect(DISTINCT s.skill_name) as Shared_Skills, sum(DISTINCT toInt(IW2.interest_level)) + sum(DISTINCT toInt(IW1.interest_level)) + sum(DISTINCT toInt(SW.skill_level)) as Total_Weight
+    ORDER BY Total_Weight DESC
+
+queryColOfCol
+	MATCH (user:User {id: "userID"})-[:TRUSTED_COLLEAGUE*2]-(colOfCol:User),
+    (colOfCol)-[:HAS_INTEREST]->(i:Interest)
+    WHERE user.id <> colOfCol.id AND (i.interest_name in {Interests} OR length({Interests}) = 0) AND NOT((user)-[:TRUSTED_COLLEAGUE]-(colOfCol))
+    RETURN DISTINCT colOfCol.first_name as First_Name ,colOfCol.last_name as Last_Name, collect(i.interest_name) as Has_Interests
