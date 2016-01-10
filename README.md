@@ -4,3 +4,6 @@ Afterwards, we were able to hand craft a few sample queries to make life easier.
 ### Technology Used
 - Neo4J
 - Python
+
+### Preview of a subset (graph was too big)
+![alt text](OurGraph.png)
