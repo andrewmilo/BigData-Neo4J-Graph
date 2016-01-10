@@ -8,6 +8,9 @@ Afterwards, we were able to hand craft a few sample queries to make life easier.
 ### Preview of a subset (graph was too big)
 ![alt text](OurGraph.png)
 
+### UML Diagram
+![alt text](CollaboratorDesignDiagram.png)
+
 ### Potential Improvements
 1. When we use PERIODIC COMMIT to commit queries in stacks of 10000, we do so in an attempt to prevent any out of memory exceptions. 
 It is successful in doing so in our tests, however there is still a possibility of a memory error due to Eager Loading. Eager Loading 
